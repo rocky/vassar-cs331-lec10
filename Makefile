@@ -1,32 +1,38 @@
-# GNU Makefile to to assist in building and runnin the 331 Language
+# GNU Makefile to to assist in building and running the 331 Language.
+
 .PHONY: all clean
 
 MAKE ?= make
 SHELL ?= bash
 
-#: Build the 311-to-assembler compiler
+#: Build the 331-to-assembler compiler
 OCAML_OPTS ?= -g
-CC_311 ?= gcc
-CFLAGS_311 ?= -g
+CC_331 ?= gcc
+CFLAGS_331 ?= -g
 PACKAGES ?= -package ounit2 -package sexplib
+COMPILER=./compile331
 
-#: Build the 331 compile.
-all: compile
+#: Build the 331 compiler.
+all: $(COMPILER)
 
-#: Compile an OCaml program
-%: %.ml
-	 ocamlfind ocamlc $(OCAML_OPTS) -o $@ -thread $(PACKAGES) -linkpkg $<
+#: Build and run a 331 program
+%: %.run
+	./$<
 
-#: Create an OCaml runnable executable, suffix .run
+#: Build a 331 executable
 %.run: %.o
-	$(CC_311) $(OCAML_OPTS) -o $@ main.c $<
+	$(CC_331) $(OCAML_OPTS) -o $@ main.c $<
 
 %.o: %.s
-	$(CC_311) $(CFLAGS_311) -c $< -o $@
+	$(CC_331) $(CFLAGS_331) -c $< -o $@
 
-%.s: %.331 ./compile
-	./compile $< > $@
+#: Compile to assembly a 331 program
+%.s: %.331 compile311
+	$(COMPILER) $< > $@
 
-# Remove all derived files
+$(COMPILER): $(COMPILER).ml
+	ocamlfind ocamlc -o $@ -thread -package ounit2 -package sexplib -linkpkg -g $<
+
+#: Remove all derived files in this directory and in example
 clean:
-	@rm compile *.cmi *.cmo; $(MAKE) -C example clean
+	@rm -v $(COMPILER) *.cmi *.cmo; $(MAKE) -C example clean
