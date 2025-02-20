@@ -1,4 +1,4 @@
-#include "true.331.h"
+#include "dummy.331.h.in"
 #include <stdio.h>
 
 extern int our_code_starts_here();

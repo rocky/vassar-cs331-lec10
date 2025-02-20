@@ -1,5 +1,9 @@
 *.cmi
 *.cmo
+*.h
+*.o
+*.run
+*.s
 /compile
 /compile331
 a.out

@@ -6,7 +6,6 @@ MAKE ?= make
 SHELL ?= bash
 
 #: Build the 331-to-assembler compiler
-OCAML_OPTS ?= -g
 CC_331 ?= gcc
 CFLAGS_331 ?= -g
 PACKAGES ?= -package ounit2 -package sexplib
@@ -21,13 +20,13 @@ all: $(COMPILER)
 
 #: Build a 331 executable
 %.run: %.o
-	$(CC_331) $(OCAML_OPTS) -o $@ main.c $<
+	$(CC_331) $(CFLAGS_311) -z noexecstack -o $@ main.c $<
 
 %.o: %.s
 	$(CC_331) $(CFLAGS_331) -c $< -o $@
 
 #: Compile to assembly a 331 program
-%.s: %.331 compile311
+%.s: %.331 compile331
 	$(COMPILER) $< > $@
 
 $(COMPILER): $(COMPILER).ml

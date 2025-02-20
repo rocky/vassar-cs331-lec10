@@ -1,0 +1,13 @@
+/* This file is the default file that gets included via
+#include dummy.331.h
+inside main.c
+
+You should never see this file in running code produced bythe 331 compiler.
+Instead a suitable replacement file should be created and substituted in main.c
+
+For example if your 331 file is super.331, then main.c should have as its first line
+
+#include super.331.h
+
+where super.331.h is created automatically from super.331
+*/
