@@ -35,4 +35,4 @@ if (($?)); then
     echo >&2 "Something went wrong with replacing name in main.c"
     exit 2
 fi
-echo "File $file_331_h and main.c updated."
+echo "File $file_331_h and main.c updated to support debugging."

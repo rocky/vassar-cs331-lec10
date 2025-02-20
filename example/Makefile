@@ -1,5 +1,6 @@
 CC_331 ?= gcc
 CFLAGS_331 ?= -g
+MAKE ?= make
 PACKAGES ?= -package ounit2 -package sexplib
 COMPILER=../compile331
 
@@ -9,18 +10,19 @@ COMPILER=../compile331
 
 #: Build a 331 executable
 %.run: %.o
-	$(CC_331) $(CFLAGS_311) -z noexecstack -o $@ main.c $<
+	$(MAKE) $(*).331.h
+	$(CC_331) $(CFLAGS_331) -z noexecstack -o $@ main.c $<
 
 %.o: %.s
 	$(CC_331) $(CFLAGS_331) -c $< -o $@
 
-#: Compile to a 331 program to assembly
+#: Compile to a 331 source program to assembly
 %.s: %.331 ../compile331
 	$(COMPILER) $< > $@
 
-
+#: Build a dummy include file as a substitute for the 331 source
 %.331.h: %.331
-	./make-debug-include.sh $@
+	./make-debug-include.sh $<
 
 
 $(COMPILER): $(COMPILER).ml
