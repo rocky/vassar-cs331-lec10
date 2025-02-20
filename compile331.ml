@@ -15,6 +15,12 @@ module Sexp = Sexplib.Sexp
    comp := < | > | =
 *)
 
+(* A position range in the source text.
+   This is a tuple of start and end line + column
+   positions.
+*)
+type source_position = Sexp.Annotated.range
+
 (* defining the 331 language *)
 type op = Inc | Dec
 type comp = Eq | Le | Gt
@@ -22,18 +28,18 @@ type comp = Eq | Le | Gt
 (* abstract syntax tree *)
 type expr =
   (* EBool(true) *)
-  | EBool of bool * Sexp.Annotated.range
-  | ENum of int * Sexp.Annotated.range (* ENum(4) *)
+  | EBool of bool * source_position
+  | ENum of int * source_position (* ENum(4) *)
   (* USE of variable EId("x") *)
-  | EId of string * Sexp.Annotated.range
-  | EOp of op * expr * Sexp.Annotated.range (* EOp(Inc,ENum(4)) *)
+  | EId of string * source_position
+  | EOp of op * expr * source_position (* EOp(Inc,ENum(4)) *)
   (* declaration of variable: variable name, value expr, body expr *)
   (* ELet("x",ENum(4), EOp(Inc,EId("x"))) *)
-  | ELet of string * expr * expr * Sexp.Annotated.range
+  | ELet of string * expr * expr * source_position
   (* EIf(ENum(2),ENum(3),ENum(4))) *)
-  | EIf of expr * expr * expr * Sexp.Annotated.range
+  | EIf of expr * expr * expr * source_position
   (* EComp(Eq,ENum(3),ENum(5)) *)
-  | EComp of comp * expr * expr * Sexp.Annotated.range
+  | EComp of comp * expr * expr * source_position
 
 (* env is a var name and its value *)
 type tenv = (string * int) list
@@ -281,7 +287,7 @@ let rec instrs_to_string (instrs : instr list) : string =
 (* List.fold_right (fun i r -> instr_to_string i ^ "\n  " ^ r) is "" *)
 
 (* compiles a source program to an x86 string *)
-let compile_with_position (program : string) : string =
+let compile_with_position (program : string) (source_file_path: string) : string =
   (* source program converted to expressions *)
   let ast : expr = parse_with_position program in
   (* generate code for the AST *)
@@ -292,20 +298,22 @@ let compile_with_position (program : string) : string =
   (* add the boilerplate to instructions to make it work *)
   sprintf
     "\n\
+    \  .file 1 \"%s.h\"\n\
     \  .text\n\
     \  .globl our_code_starts_here\n\
     \  our_code_starts_here:\n\
     \  %s\n\
     \  \n"
-    instrs_str
+    source_file_path instrs_str
 
 (* top-level-function -- code execution starts here *)
 let () =
   (* opens the file passed in on the command line  *)
-  let input_file = open_in Sys.argv.(1) in
+  let source_file_path = Sys.argv.(1) in
+  let input_file = open_in source_file_path in
   (* reads the file in *)
   let input_program : string = input_line input_file in
   (* compiles the file to an X86 string *)
-  let program : string = compile_with_position input_program in
+  let program : string = compile_with_position input_program source_file_path in
   (* prints the resulting x86 string *)
   printf "%s\n" program
