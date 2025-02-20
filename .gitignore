@@ -1,1 +1,5 @@
+a.out
+*.cmi
+*.cmo
+/compile
 tmp
