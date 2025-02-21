@@ -19,7 +19,7 @@ module Sexp = Sexplib.Sexp
    This is a tuple of start and end line + column
    positions.
 *)
-type source_position = Sexp.Annotated.range
+type source_position_type = Sexp.Annotated.range
 
 (* defining the 331 language *)
 type op = Inc | Dec
@@ -28,18 +28,19 @@ type comp = Eq | Le | Gt
 (* abstract syntax tree *)
 type expr =
   (* EBool(true) *)
-  | EBool of bool * source_position
-  | ENum of int * source_position (* ENum(4) *)
+  | EBool of bool * source_position_type
+  | ENum of int * source_position_type (* ENum(4) *)
   (* USE of variable EId("x") *)
-  | EId of string * source_position
-  | EOp of op * expr * source_position (* EOp(Inc,ENum(4)) *)
+  | EId of string * source_position_type
+  | EId_old of string
+  | EOp of op * expr * source_position_type (* EOp(Inc,ENum(4)) *)
   (* declaration of variable: variable name, value expr, body expr *)
   (* ELet("x",ENum(4), EOp(Inc,EId("x"))) *)
-  | ELet of string * expr * expr * source_position
+  | ELet of string * expr * expr * source_position_type
   (* EIf(ENum(2),ENum(3),ENum(4))) *)
-  | EIf of expr * expr * expr * source_position
+  | EIf of expr * expr * expr * source_position_type
   (* EComp(Eq,ENum(3),ENum(5)) *)
-  | EComp of comp * expr * expr * source_position
+  | EComp of comp * expr * expr * source_position_type
 
 (* env is a var name and its value *)
 type tenv = (string * int) list
@@ -49,7 +50,7 @@ type reg = Rax | Rsp
 type arg = Const of int | Reg of reg | RegOffset of int * reg
 
 type instr =
-  | Loc of source_position
+  | Loc of source_position_type
   | IAdd of arg * arg
   | ISub of arg * arg
   | IMov of arg * arg
@@ -126,6 +127,7 @@ let new_label (s : string) : string =
   (* and concatenate counter to base string *)
   s ^ count_str
 
+
 let rec sexp_to_expr_with_position (se : Sexp.Annotated.t) =
   let range = Sexp.Annotated.get_range se in
   match Sexp.Annotated.get_sexp se with
@@ -134,7 +136,7 @@ let rec sexp_to_expr_with_position (se : Sexp.Annotated.t) =
   (* | Atom s -> ( *)
   (*     match int_of_string_opt s with None -> EId s | Some i -> ENum i) *)
   (* (\* inc and dec must be followed by exactly one expression *\) *)
-  (* | List [ Atom "inc"; thing ] -> EOp (Inc, sexp_to_expr thing) *)
+  (* | List [ Atom "inc"; thing ] -> EOp (Inc, (sexp_to_expr_with_position thing), range) *)
   (* | List [ Atom "dec"; thing ] -> EOp (Dec, sexp_to_expr thing) *)
   (* (\* need to match down an extra level to access variable name *\) *)
   (* | List [ Atom "let"; List [ Atom name; thing1 ]; thing2 ] -> *)
@@ -148,7 +150,7 @@ let rec sexp_to_expr_with_position (se : Sexp.Annotated.t) =
   (* | List [ Atom ">"; thing1; thing2 ] -> *)
   (*     EComp (Gt, sexp_to_expr thing1, sexp_to_expr thing2) *)
   (* (\* any other s-expressions aren't legal in the 331 language *\) *)
-  (* | _ -> failwith "Parse error" *)
+  | _ -> failwith "Parse error"
 
 let parse_with_position (s : string) : expr =
   (* "parse()" but saving position information.
@@ -167,7 +169,7 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
       (* if b then [IMov(Const(1),Reg(Rax))]
                   else [IMov(Const(0),Reg(Rax))] *)
       (* even more compact version of the above *)
-      [ Loc range ; IMov (Const (if b then 1 else 0), Reg Rax) ]
+      [ Loc range; IMov (Const (if b then 1 else 0), Reg Rax) ]
   | ENum (i, range) ->
       (* move into rax *)
       [ IMov (Const i, Reg Rax) ]
@@ -222,6 +224,7 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
       e1_instrs @ compare @ je @ e2_instrs @ jmp @ else_l @ e3_instrs @ after_l
   | EComp (comp, e1, e2, range) ->
       (* generate instrs for e1 and save to stack *)
+      let loc : instr list = [ Loc range ] in
       let e1_instrs : instr list = expr_to_instrs e1 env si in
       let store_e1 : instr list = [ IMov (Reg Rax, stackloc si) ] in
       (* generate instructions for e2 ---> rax *)
@@ -242,8 +245,8 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
                               won't jump and then will move into 1 rax *)
         (* this is simpler than if because only uses one jump and label *)
       in
-      e1_instrs @ store_e1 @ e2_instrs @ compare @ f_instrs @ jmp @ t_instrs
-      @ after_l
+      loc @ e1_instrs @ store_e1 @ e2_instrs @ compare @ f_instrs @ jmp
+      @ t_instrs @ after_l
 
 (* convert a list of instructions into one properly formatted string *)
 let rec instrs_to_string (instrs : instr list) : string =
@@ -255,7 +258,8 @@ let rec instrs_to_string (instrs : instr list) : string =
 (* List.fold_right (fun i r -> instr_to_string i ^ "\n  " ^ r) is "" *)
 
 (* compiles a source program to an x86 string *)
-let compile_with_position (program : string) (source_file_path: string) : string =
+let compile_with_position (program : string) (source_file_path : string) :
+    string =
   (* source program converted to expressions *)
   let ast : expr = parse_with_position program in
   (* generate code for the AST *)
@@ -278,9 +282,9 @@ let compile_with_position (program : string) (source_file_path: string) : string
 let () =
   (* opens the file passed in on the command line  *)
   let source_file_path = Sys.argv.(1) in
-  let input_file = open_in source_file_path in
+  let input_channel = open_in source_file_path in
   (* reads the file in *)
-  let input_program : string = input_line input_file in
+  let input_program : string = input_line input_channel in
   (* compiles the file to an X86 string *)
   let program : string = compile_with_position input_program source_file_path in
   (* prints the resulting x86 string *)
