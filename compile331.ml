@@ -49,6 +49,7 @@ type reg = Rax | Rsp
 type arg = Const of int | Reg of reg | RegOffset of int * reg
 
 type instr =
+  | Loc of source_position
   | IAdd of arg * arg
   | ISub of arg * arg
   | IMov of arg * arg
@@ -92,7 +93,7 @@ let instr_to_string (i : instr) : string =
   | IJle l -> sprintf "jle %s" l
   | ILab l -> sprintf "%s: " l
   | IRet -> "ret"
-
+  | Loc p -> sprintf ".loc 1 %d %d" (p.start_pos.line + 1) p.start_pos.col
 (* HELPER FUNCTIONS *)
 
 (* wrapper for int_of_string *)
@@ -125,39 +126,6 @@ let new_label (s : string) : string =
   (* and concatenate counter to base string *)
   s ^ count_str
 
-(********  older code
-(* converts an s-expression into an expression *)
-let rec sexp_to_expr (se : Sexp.t) : expr =
-  match se with
-  | Atom "true" -> EBool true
-  | Atom "false" -> EBool false
-  | Atom s -> (
-      match int_of_string_opt s with None -> EId s | Some i -> ENum i)
-  (* inc and dec must be followed by exactly one expression *)
-  | List [ Atom "inc"; thing ] -> EOp (Inc, sexp_to_expr thing)
-  | List [ Atom "dec"; thing ] -> EOp (Dec, sexp_to_expr thing)
-  (* need to match down an extra level to access variable name *)
-  | List [ Atom "let"; List [ Atom name; thing1 ]; thing2 ] ->
-      ELet (name, sexp_to_expr thing1, sexp_to_expr thing2)
-  | List [ Atom "if"; thing1; thing2; thing3 ] ->
-      EIf (sexp_to_expr thing1, sexp_to_expr thing2, sexp_to_expr thing3)
-  | List [ Atom "="; thing1; thing2 ] ->
-      EComp (Eq, sexp_to_expr thing1, sexp_to_expr thing2)
-  | List [ Atom "<"; thing1; thing2 ] ->
-      EComp (Le, sexp_to_expr thing1, sexp_to_expr thing2)
-  | List [ Atom ">"; thing1; thing2 ] ->
-      EComp (Gt, sexp_to_expr thing1, sexp_to_expr thing2)
-  (* any other s-expressions aren't legal in the 331 language *)
-  | _ -> failwith "Parse error"
-
-(* ex: "(inc 4)" -- List[Atom("inc");Atom("4")] ----> EOp(Inc,ENum(4)) *)
-let parse (s : string) : expr =
-  (* first turn a string into an sexpression (built-in)
-       then turn an sexpression into a expression *)
-   sexp_to_expr (Sexp.of_string s)
- *********************)
-
-
 let rec sexp_to_expr_with_position (se : Sexp.Annotated.t) =
   let range = Sexp.Annotated.get_range se in
   match Sexp.Annotated.get_sexp se with
@@ -185,7 +153,7 @@ let rec sexp_to_expr_with_position (se : Sexp.Annotated.t) =
 let parse_with_position (s : string) : expr =
   (* "parse()" but saving position information.
      First turn a string into an sexpression (built-in).
-     Thehen turn an position-annotated sexpression into an expression.
+     Then turn an position-annotated sexpression into an expression.
    *)
   sexp_to_expr_with_position (Sexp.Annotated.of_string s)
 
@@ -199,7 +167,7 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
       (* if b then [IMov(Const(1),Reg(Rax))]
                   else [IMov(Const(0),Reg(Rax))] *)
       (* even more compact version of the above *)
-      [ IMov (Const (if b then 1 else 0), Reg Rax) ]
+      [ Loc range ; IMov (Const (if b then 1 else 0), Reg Rax) ]
   | ENum (i, range) ->
       (* move into rax *)
       [ IMov (Const i, Reg Rax) ]
