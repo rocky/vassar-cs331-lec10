@@ -41,6 +41,11 @@ type expr =
   (* EComp(Eq,ENum(3),ENum(5)) *)
   | EComp of comp * expr * expr * source_position_type
 
+  (* Remove these *)
+  | ENum_old of int
+  | EId_old of string
+
+
 (* env is a var name and its value *)
 type tenv = (string * int) list
 
@@ -126,15 +131,35 @@ let new_label (s : string) : string =
   (* and concatenate counter to base string *)
   s ^ count_str
 
-let rec sexp_to_expr_with_position (se : Sexp.Annotated.t) =
-  let range = Sexp.Annotated.get_range se in
-  match Sexp.Annotated.get_sexp se with
-  | Atom "true" -> EBool (true, range)
-  | Atom "false" -> EBool (false, range)
+let rec sexp_to_expr (se : Sexp.t): expr =
+  match se with
   | Atom s -> (
-      match int_of_string_opt s with None -> EId (s, range) | Some i -> ENum (i, range))
+      match int_of_string_opt s with None -> EId_old s | Some i -> ENum_old i)
   (* (\* inc and dec must be followed by exactly one expression *\) *)
-  (* | List [ Atom "inc"; thing ] -> EOp (Inc, (sexp_to_expr_with_position thing), range) *)
+  (* | List [ Atom "dec"; thing ] -> EOp (Dec, sexp_to_expr thing) *)
+  (* (\* need to match down an extra level to access variable name *\) *)
+  (* | List [ Atom "let"; List [ Atom name; thing1 ]; thing2 ] -> *)
+  (*     ELet (name, sexp_to_expr thing1, sexp_to_expr thing2) *)
+  (* | List [ Atom "if"; thing1; thing2; thing3 ] -> *)
+  (*     EIf (sexp_to_expr thing1, sexp_to_expr thing2, sexp_to_expr thing3) *)
+  (* | List [ Atom "="; thing1; thing2 ] -> *)
+  (*     EComp (Eq, sexp_to_expr thing1, sexp_to_expr thing2) *)
+  (* | List [ Atom "<"; thing1; thing2 ] -> *)
+  (*     EComp (Le, sexp_to_expr thing1, sexp_to_expr thing2) *)
+  (* | List [ Atom ">"; thing1; thing2 ] -> *)
+  (*     EComp (Gt, sexp_to_expr thing1, sexp_to_expr thing2) *)
+  (* (\* any other s-expressions aren't legal in the 331 language *\) *)
+  | _ -> failwith "Parse error"
+
+let rec sexp_to_expr_with_position (se : Sexp.Annotated.t) =
+  let source_position = Sexp.Annotated.get_range se in
+  match Sexp.Annotated.get_sexp se with
+  | Atom "true" -> EBool (true, source_position)
+  | Atom "false" -> EBool (false, source_position)
+  | Atom s -> (
+      match int_of_string_opt s with None -> EId (s, source_position) | Some i -> ENum (i, source_position))
+  (* (\* inc and dec must be followed by exactly one expression *\) *)
+  | List[Atom("inc"); thing] -> EOp(Inc, (sexp_to_expr thing), source_position)
   (* | List [ Atom "dec"; thing ] -> EOp (Dec, sexp_to_expr thing) *)
   (* (\* need to match down an extra level to access variable name *\) *)
   (* | List [ Atom "let"; List [ Atom name; thing1 ]; thing2 ] -> *)
@@ -163,33 +188,33 @@ let parse_with_position (s : string) : expr =
 (* si is the next available stack index *)
 let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
   match e with
-  | EBool (b, range) ->
+  | EBool (b, source_position) ->
       (* if b then [IMov(Const(1),Reg(Rax))]
                   else [IMov(Const(0),Reg(Rax))] *)
       (* even more compact version of the above *)
-      [ Loc range; IMov (Const (if b then 1 else 0), Reg Rax) ]
-  | ENum (i, range) ->
+      [ Loc source_position; IMov (Const (if b then 1 else 0), Reg Rax) ]
+  | ENum (i, source_position) ->
       (* move into rax *)
-      [ Loc range; IMov (Const i, Reg Rax) ]
-  | EId (x, range) -> (
+      [ Loc source_position; IMov (Const i, Reg Rax) ]
+  | EId (x, source_position) -> (
       (* look up x in env *)
       match find env x with
       | None -> failwith "Unbound variable"
       | Some i ->
           (* move from location in env to rax *)
-          [ Loc range; IMov (stackloc i, Reg Rax) ])
-  | EOp (op, e2, range) ->
+          [ Loc source_position; IMov (stackloc i, Reg Rax) ])
+  | EOp (op, e2, source_position) ->
       (* handle nested expression *)
       let rec_instrs = expr_to_instrs e2 env si in
       (* figure out which op it is *)
       let new_instr =
         match op with
-        | Inc -> [ Loc range; IAdd (Const 1, Reg Rax) ]
-        | Dec -> [ Loc range; ISub (Const 1, Reg Rax) ]
+        | Inc -> [ Loc source_position; IAdd (Const 1, Reg Rax) ]
+        | Dec -> [ Loc source_position; ISub (Const 1, Reg Rax) ]
         (* smush the instructions *)
       in
       rec_instrs @ new_instr
-  | ELet (x, v, b, range) ->
+  | ELet (x, v, b, source_position) ->
       (* figure out what value is -> rax *)
       (* note that if a var is declared inside v
                        then x will clobber it because si is unchanged *)
@@ -202,7 +227,7 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
       let b_instrs : instr list = expr_to_instrs b ((x, si) :: env) (si + 1) in
       (* smush all instructions together *)
       v_instrs @ store @ b_instrs
-  | EIf (e1, e2, e3, range) ->
+  | EIf (e1, e2, e3, source_position) ->
       (* generate instrs for recursive expressions *)
       let e1_instrs : instr list = expr_to_instrs e1 env si in
       let e2_instrs : instr list = expr_to_instrs e2 env si in
@@ -220,9 +245,9 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
       let after_l : instr list = [ ILab after_s ] in
       (* put it all together - order matters *)
       e1_instrs @ compare @ je @ e2_instrs @ jmp @ else_l @ e3_instrs @ after_l
-  | EComp (comp, e1, e2, range) ->
+  | EComp (comp, e1, e2, source_position) ->
       (* generate instrs for e1 and save to stack *)
-      let loc : instr list = [ Loc range ] in
+      let loc : instr list = [ Loc source_position ] in
       let e1_instrs : instr list = expr_to_instrs e1 env si in
       let store_e1 : instr list = [ IMov (Reg Rax, stackloc si) ] in
       (* generate instructions for e2 ---> rax *)
