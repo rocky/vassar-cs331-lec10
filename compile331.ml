@@ -32,7 +32,6 @@ type expr =
   | ENum of int * source_position_type (* ENum(4) *)
   (* USE of variable EId("x") *)
   | EId of string * source_position_type
-  | EId_old of string
   | EOp of op * expr * source_position_type (* EOp(Inc,ENum(4)) *)
   (* declaration of variable: variable name, value expr, body expr *)
   (* ELet("x",ENum(4), EOp(Inc,EId("x"))) *)
@@ -127,14 +126,13 @@ let new_label (s : string) : string =
   (* and concatenate counter to base string *)
   s ^ count_str
 
-
 let rec sexp_to_expr_with_position (se : Sexp.Annotated.t) =
   let range = Sexp.Annotated.get_range se in
   match Sexp.Annotated.get_sexp se with
   | Atom "true" -> EBool (true, range)
   | Atom "false" -> EBool (false, range)
-  (* | Atom s -> ( *)
-  (*     match int_of_string_opt s with None -> EId s | Some i -> ENum i) *)
+  | Atom s -> (
+      match int_of_string_opt s with None -> EId (s, range) | Some i -> ENum (i, range))
   (* (\* inc and dec must be followed by exactly one expression *\) *)
   (* | List [ Atom "inc"; thing ] -> EOp (Inc, (sexp_to_expr_with_position thing), range) *)
   (* | List [ Atom "dec"; thing ] -> EOp (Dec, sexp_to_expr thing) *)
@@ -172,22 +170,22 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
       [ Loc range; IMov (Const (if b then 1 else 0), Reg Rax) ]
   | ENum (i, range) ->
       (* move into rax *)
-      [ IMov (Const i, Reg Rax) ]
+      [ Loc range; IMov (Const i, Reg Rax) ]
   | EId (x, range) -> (
       (* look up x in env *)
       match find env x with
       | None -> failwith "Unbound variable"
       | Some i ->
           (* move from location in env to rax *)
-          [ IMov (stackloc i, Reg Rax) ])
+          [ Loc range; IMov (stackloc i, Reg Rax) ])
   | EOp (op, e2, range) ->
       (* handle nested expression *)
       let rec_instrs = expr_to_instrs e2 env si in
       (* figure out which op it is *)
       let new_instr =
         match op with
-        | Inc -> [ IAdd (Const 1, Reg Rax) ]
-        | Dec -> [ ISub (Const 1, Reg Rax) ]
+        | Inc -> [ Loc range; IAdd (Const 1, Reg Rax) ]
+        | Dec -> [ Loc range; ISub (Const 1, Reg Rax) ]
         (* smush the instructions *)
       in
       rec_instrs @ new_instr
