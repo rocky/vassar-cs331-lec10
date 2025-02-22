@@ -1,5 +1,5 @@
 /* Dummy main program for 331 language code */
-#include "inc.331.h"
+#include "comp.331.h"
 #include <stdio.h>
 
 extern int our_code_starts_here();

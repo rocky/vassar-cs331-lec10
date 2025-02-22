@@ -149,12 +149,24 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
       (*     ELet (name, sexp_to_expr thing1, sexp_to_expr thing2) *)
       (* | List [ Atom "if"; thing1; thing2; thing3 ] -> *)
       (*     EIf (sexp_to_expr thing1, sexp_to_expr thing2, sexp_to_expr thing3) *)
-      (* | List [ Atom "="; thing1; thing2 ] -> *)
-      (*     EComp (Eq, sexp_to_expr thing1, sexp_to_expr thing2) *)
-      (* | List [ Atom "<"; thing1; thing2 ] -> *)
-      (*     EComp (Le, sexp_to_expr thing1, sexp_to_expr thing2) *)
-      (* | List [ Atom ">"; thing1; thing2 ] -> *)
-      (*     EComp (Gt, sexp_to_expr thing1, sexp_to_expr thing2) *)
+      | Atom(source_position, Atom "=") ->
+        EComp
+          (Eq,
+           sexp_to_expr_with_position (List.nth annotated_list 1),
+           sexp_to_expr_with_position (List.nth annotated_list 2),
+           source_position)
+      | Atom(source_position, Atom "<") ->
+        EComp
+          (Le,
+           sexp_to_expr_with_position (List.nth annotated_list 1),
+           sexp_to_expr_with_position (List.nth annotated_list 2),
+           source_position)
+      | Atom(source_position, Atom ">") ->
+        EComp
+          (Gt,
+           sexp_to_expr_with_position (List.nth annotated_list 1),
+           sexp_to_expr_with_position (List.nth annotated_list 2),
+           source_position)
       (* any other List s-expressions aren't legal in the 331 language *)
       | _ -> failwith "Error parsing a List sexp")
 
