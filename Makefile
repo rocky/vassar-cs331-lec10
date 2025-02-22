@@ -1,5 +1,5 @@
 # GNU Makefile to to assist in building and running the 331 Language.
-
+include: ../common.mk
 .PHONY: all clean
 
 MAKE ?= make
@@ -20,7 +20,7 @@ all: $(COMPILER)
 
 #: Build a 331 executable
 %.run: %.o
-	$(CC_331) $(CFLAGS_311) -z noexecstack -o $@ main.c $<
+	$(CC_331) $(CFLAGS_311) -z noexecstack -o $@ example/main.c $<
 
 %.o: %.s
 	$(CC_331) $(CFLAGS_331) -c $< -o $@

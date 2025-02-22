@@ -41,11 +41,6 @@ type expr =
   (* EComp(Eq,ENum(3),ENum(5)) *)
   | EComp of comp * expr * expr * source_position_type
 
-  (* Remove these *)
-  | ENum_old of int
-  | EId_old of string
-
-
 (* env is a var name and its value *)
 type tenv = (string * int) list
 
@@ -98,7 +93,7 @@ let instr_to_string (i : instr) : string =
   | IJle l -> sprintf "jle %s" l
   | ILab l -> sprintf "%s: " l
   | IRet -> "ret"
-  | Loc p -> sprintf ".loc 1 %d %d" (p.start_pos.line + 1) p.start_pos.col
+  | Loc p -> sprintf ".loc 1 %d %d" (p.start_pos.line + 1) (p.start_pos.col + 1)
 (* HELPER FUNCTIONS *)
 
 (* wrapper for int_of_string *)
@@ -131,49 +126,37 @@ let new_label (s : string) : string =
   (* and concatenate counter to base string *)
   s ^ count_str
 
-let rec sexp_to_expr (se : Sexp.t): expr =
-  match se with
-  | Atom s -> (
-      match int_of_string_opt s with None -> EId_old s | Some i -> ENum_old i)
-  (* (\* inc and dec must be followed by exactly one expression *\) *)
-  (* | List [ Atom "dec"; thing ] -> EOp (Dec, sexp_to_expr thing) *)
-  (* (\* need to match down an extra level to access variable name *\) *)
-  (* | List [ Atom "let"; List [ Atom name; thing1 ]; thing2 ] -> *)
-  (*     ELet (name, sexp_to_expr thing1, sexp_to_expr thing2) *)
-  (* | List [ Atom "if"; thing1; thing2; thing3 ] -> *)
-  (*     EIf (sexp_to_expr thing1, sexp_to_expr thing2, sexp_to_expr thing3) *)
-  (* | List [ Atom "="; thing1; thing2 ] -> *)
-  (*     EComp (Eq, sexp_to_expr thing1, sexp_to_expr thing2) *)
-  (* | List [ Atom "<"; thing1; thing2 ] -> *)
-  (*     EComp (Le, sexp_to_expr thing1, sexp_to_expr thing2) *)
-  (* | List [ Atom ">"; thing1; thing2 ] -> *)
-  (*     EComp (Gt, sexp_to_expr thing1, sexp_to_expr thing2) *)
-  (* (\* any other s-expressions aren't legal in the 331 language *\) *)
-  | _ -> failwith "Parse error"
-
-let rec sexp_to_expr_with_position (se : Sexp.Annotated.t) =
-  let source_position = Sexp.Annotated.get_range se in
-  match Sexp.Annotated.get_sexp se with
-  | Atom "true" -> EBool (true, source_position)
-  | Atom "false" -> EBool (false, source_position)
-  | Atom s -> (
-      match int_of_string_opt s with None -> EId (s, source_position) | Some i -> ENum (i, source_position))
-  (* (\* inc and dec must be followed by exactly one expression *\) *)
-  | List[Atom("inc"); thing] -> EOp(Inc, (sexp_to_expr thing), source_position)
-  (* | List [ Atom "dec"; thing ] -> EOp (Dec, sexp_to_expr thing) *)
-  (* (\* need to match down an extra level to access variable name *\) *)
-  (* | List [ Atom "let"; List [ Atom name; thing1 ]; thing2 ] -> *)
-  (*     ELet (name, sexp_to_expr thing1, sexp_to_expr thing2) *)
-  (* | List [ Atom "if"; thing1; thing2; thing3 ] -> *)
-  (*     EIf (sexp_to_expr thing1, sexp_to_expr thing2, sexp_to_expr thing3) *)
-  (* | List [ Atom "="; thing1; thing2 ] -> *)
-  (*     EComp (Eq, sexp_to_expr thing1, sexp_to_expr thing2) *)
-  (* | List [ Atom "<"; thing1; thing2 ] -> *)
-  (*     EComp (Le, sexp_to_expr thing1, sexp_to_expr thing2) *)
-  (* | List [ Atom ">"; thing1; thing2 ] -> *)
-  (*     EComp (Gt, sexp_to_expr thing1, sexp_to_expr thing2) *)
-  (* (\* any other s-expressions aren't legal in the 331 language *\) *)
-  | _ -> failwith "Parse error"
+let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
+  match sexp_annotated with
+  | Atom (source_position, type_t) -> (
+      match type_t with
+      | Atom "true" -> EBool (true, source_position)
+      | Atom "false" -> EBool (false, source_position)
+      | Atom s -> (
+          match int_of_string_opt s with
+          | None -> EId (s, source_position)
+          | Some i -> ENum (i, source_position))
+      | _ -> failwith "Error parsing an Atom sexp")
+  | List (source_position, annotated_list, type_t) -> (
+      match List.hd annotated_list with
+      (* inc and dec must be followed by exactly one expression *)
+      | Atom (source_position, Atom "inc") ->
+          EOp (Inc, (sexp_to_expr_with_position (List.nth annotated_list 1)), source_position)
+      | Atom (source_position, Atom "dec") ->
+          EOp (Dec, (sexp_to_expr_with_position (List.nth annotated_list 1)), source_position)
+      (* (\* need to match down an extra level to access variable name *\) *)
+      (* | List [ Atom "let"; List [ Atom name; thing1 ]; thing2 ] -> *)
+      (*     ELet (name, sexp_to_expr thing1, sexp_to_expr thing2) *)
+      (* | List [ Atom "if"; thing1; thing2; thing3 ] -> *)
+      (*     EIf (sexp_to_expr thing1, sexp_to_expr thing2, sexp_to_expr thing3) *)
+      (* | List [ Atom "="; thing1; thing2 ] -> *)
+      (*     EComp (Eq, sexp_to_expr thing1, sexp_to_expr thing2) *)
+      (* | List [ Atom "<"; thing1; thing2 ] -> *)
+      (*     EComp (Le, sexp_to_expr thing1, sexp_to_expr thing2) *)
+      (* | List [ Atom ">"; thing1; thing2 ] -> *)
+      (*     EComp (Gt, sexp_to_expr thing1, sexp_to_expr thing2) *)
+      (* any other List s-expressions aren't legal in the 331 language *)
+      | _ -> failwith "Error parsing a List sexp")
 
 let parse_with_position (s : string) : expr =
   (* "parse()" but saving position information.

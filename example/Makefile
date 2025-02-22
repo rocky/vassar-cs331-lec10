@@ -1,7 +1,6 @@
-CC_331 ?= gcc
-CFLAGS_331 ?= -g
+include ../common.mk
+
 MAKE ?= make
-PACKAGES ?= -package ounit2 -package sexplib
 COMPILER=../compile331
 
 #: Build and run a 331 program
