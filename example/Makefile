@@ -18,8 +18,8 @@ include ../common.mk
 
 #: Build a dummy include file as a substitute for the 331 source
 %.331.h: %.331
-	./make-debug-include.sh $<
+	./make-debug-include.sh $(VERBOSE) $<
 
 
 clean:
-	@rm -v *.run || true
+	@rm -v *.run *.h $(MAIN_STUB_FILE) || true

@@ -1,3 +1,4 @@
+/* Dummy main program for 331 language code */
 #include "inc.331.h"
 #include <stdio.h>
 

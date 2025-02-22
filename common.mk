@@ -5,6 +5,7 @@ CFLAGS_331 ?= -g
 MAKE ?= make
 PACKAGES ?= -package ounit2 -package sexplib
 SHELL ?= bash
+VERBOSE ?= "-v"  # or set to ""
 
 # $(MAIN_STUB_FILE) should have already been set.
 #: Build a 331 executable
