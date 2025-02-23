@@ -5,7 +5,7 @@ module Sexp = Sexplib.Sexp
 
 (* 331 grammar for the current language.
    <number>, true, false, and <identifier> are tokens that don't need
-   to be parsed. *)
+   to be parsed.  <expr> is the start symbol. *)
 (* expr :=  <number>
           | true
           | false
@@ -24,7 +24,10 @@ module Sexp = Sexplib.Sexp
 *)
 type source_position_type = Sexp.Annotated.range
 
-(* Define a function for describing a source position in human-readable form. *)
+(* Define a function for describing a source position in human-readable form.
+   sexplib's position start at 0, while humans usually start at 1, so we
+   add one to line and column values.
+*)
 let position_to_human (position : source_position_type) : string =
   if position.start_pos.line == position.end_pos.line then
     sprintf "line %d, characters %d-%d" position.start_pos.line
@@ -109,6 +112,7 @@ let instr_to_string (i : instr) : string =
   | IJle l -> sprintf "jle %s" l
   | ILab l -> sprintf "%s: " l
   | IRet -> "ret"
+  (* Note: below we add one to convert from 0-origin to 1-origin.  *)
   | Loc p -> sprintf ".loc 1 %d %d" (p.start_pos.line + 1) (p.start_pos.col + 1)
 (* HELPER FUNCTIONS *)
 
