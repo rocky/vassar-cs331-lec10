@@ -25,7 +25,7 @@ module Sexp = Sexplib.Sexp
 type source_position_type = Sexp.Annotated.range
 
 (* Define a function for describing a source position in human-readable form.
-   sexplib's position start at 0, while humans usually start at 1, so we
+   sexplib's position starts at 0, while humans usually start at 1, so we
    add one to line and column values.
 *)
 let position_to_human (position : source_position_type) : string =
