@@ -142,7 +142,7 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
   | List (source_position, annotated_list, type_t) -> (
       (* parse Lists *)
       match List.hd annotated_list with
-      (* "inc" and "dec" functions take exactly one expression *)
+      (* Parse Unary "inc" and "dec" functions *)
       | Atom (source_position, Atom "inc") ->
           EOp
             ( Inc,
@@ -154,38 +154,42 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
               sexp_to_expr_with_position (List.nth annotated_list 1),
               source_position )
       | Atom (source_position, Atom "let") -> (
-          (* For the "let" variable name, we need to match down an extra
-           level to access variable name *)
+          (* For the two-argument "let" variable name, we need to match down an extra
+           list level to access the "let" variable name and value *)
           match List.nth annotated_list 1 with
           | List (source_position, name_value_sexp, type_t) -> (
               match List.nth name_value_sexp 0 with
               | Atom (source_position, name_sexp) -> (
                   match name_sexp with
                   | Atom name -> (
-                    match int_of_string_opt name with
-                    | None ->
-                      ELet
-                        ( name,
-                          sexp_to_expr_with_position (List.nth name_value_sexp 1),
-                          sexp_to_expr_with_position (List.nth annotated_list 2),
-                          source_position )
-                    | _ ->
+                      match int_of_string_opt name with
+                      | None ->
+                          ELet
+                            ( name,
+                              sexp_to_expr_with_position
+                                (List.nth name_value_sexp 1),
+                              sexp_to_expr_with_position
+                                (List.nth annotated_list 2),
+                              source_position )
+                      | _ ->
+                          failwith
+                            "A name is expected as the first argument of \
+                             \"let\", but we see an integer")
+                  | _ ->
                       failwith
-                        "A name is expected as the first argument of \"let\", \
-                         but we see an integer")
-                  | _ -> failwith
-                           "An atom is expected as the first argument of \"let\""
-                )
+                        "An atom is expected as the first argument of \"let\"")
               | _ ->
-                failwith
-                  "An atom is expected as the first argument of \"let\"."
-            )
-          | _ ->
-            failwith
-              "A List is expected as the first argument of \"let\"."
+                  failwith
+                    "An atom is expected as the first argument of \"let\".")
+          | _ -> failwith "A List is expected as the first argument of \"let\"."
+          )
+      | Atom (source_position, Atom  "if") -> (
+          EIf (
+            sexp_to_expr_with_position (List.nth annotated_list 1),
+            sexp_to_expr_with_position (List.nth annotated_list 2),
+            sexp_to_expr_with_position (List.nth annotated_list 3),
+            source_position )
         )
-      (* | List [ Atom "if"; thing1; thing2; thing3 ] -> *)
-      (*     EIf (sexp_to_expr thing1, sexp_to_expr thing2, sexp_to_expr thing3) *)
       | Atom (source_position, Atom "=") ->
           EComp
             ( Eq,
@@ -250,7 +254,7 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
       (* figure out what value is -> rax *)
       (* note that if a var is declared inside v
                        then x will clobber it because si is unchanged *)
-      let loc: instr list = [Loc source_position ] in
+      let loc : instr list = [ Loc source_position ] in
       let v_instrs : instr list = expr_to_instrs v env si in
       (* move value from rax to next available stack spot *)
       let store : instr list = [ IMov (Reg Rax, stackloc si) ] in
