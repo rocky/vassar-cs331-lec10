@@ -200,26 +200,25 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
                       | _ ->
                           failwith
                             (sprintf
-                               "An identifier is expected as the first argument of \
-                                let, but we see an integer at %s."
+                               "An identifier is expected as the first \
+                                argument of let, but we see an integer at %s."
                                (position_to_human source_position)))
                   | _ ->
                       failwith
                         (sprintf
-                           "An atom is expected as the first argument of \
-                            let at %s."
+                           "An atom is expected as the first argument of let \
+                            at %s."
                            (position_to_human source_position)))
               | _ ->
                   failwith
                     (sprintf
-                       "An atom is expected as the first argument of let \
-                        at %s."
+                       "An atom is expected as the first argument of let at %s."
                        (position_to_human source_position)))
           | _ ->
               failwith
                 (sprintf
                    "A List is expected as the first argument of let at %s."
-                    (position_to_human source_position)))
+                   (position_to_human source_position)))
       | Atom (source_position, Atom "if") ->
           EIf
             ( sexp_to_expr_with_position (List.nth annotated_list 1),
@@ -247,7 +246,9 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
       (* any other List s-expressions aren't legal in the 331 language *)
       | _ ->
           failwith
-            (sprintf "List expression at %s, does not start with an identifier I know about."
+            (sprintf
+               "List expression at %s, does not start with an identifier I \
+                know about."
                (position_to_human source_position)))
 
 (* Note: we add "_with_position" in case you want to be able to use
@@ -311,6 +312,7 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
       loc @ v_instrs @ store @ b_instrs
   | EIf (test_exp, then_exp, else_exp, source_position) ->
       (* generate instrs for recursive expressions *)
+      let loc : instr list = [ Loc source_position ] in
       let test_exp_instrs : instr list = expr_to_instrs test_exp env si in
       let then_exp_instrs : instr list = expr_to_instrs then_exp env si in
       let else_exp_instrs : instr list = expr_to_instrs else_exp env si in
@@ -326,7 +328,7 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
       let else_l : instr list = [ ILab else_s ] in
       let after_l : instr list = [ ILab after_s ] in
       (* put it all together - order matters *)
-      test_exp_instrs @ compare @ je @ then_exp_instrs @ jmp @ else_l
+      loc @ test_exp_instrs @ compare @ je @ then_exp_instrs @ jmp @ else_l
       @ else_exp_instrs @ after_l
   | EComp (comp, left_exp, right_exp, source_position) ->
       (* generate instrs for left_exp and save to stack *)
