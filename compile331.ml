@@ -146,6 +146,14 @@ let new_label (s : string) : string =
   (* and concatenate counter to base string *)
   s ^ count_str
 
+(* Create a string parse error message form an annonated S-expression and
+its location. *)
+let to_parse_error_string (prefix : string) (sexp_annotated : Sexp.Annotated.t)
+    : string =
+  sprintf "%s '%s' at %s" prefix
+    (Sexplib.Sexp.to_string_hum (Sexp.Annotated.get_sexp sexp_annotated))
+    (position_to_human (Sexp.Annotated.get_range sexp_annotated))
+
 (* Note: we add "_with_position" in case you want to be able to use
    sexpr_to_expr as well.
 *)
@@ -162,9 +170,7 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
           | None -> EId (id, source_position)
           | Some int_value -> ENum (int_value, source_position))
       | _ ->
-          failwith
-            (sprintf "Error parsing an Atom sexp at %s."
-               (position_to_human source_position)))
+          failwith (to_parse_error_string "Error parsing Atom" sexp_annotated))
   | Annotated.List (source_position, annotated_list, _) -> (
       (* parse Lists *)
       match annotated_list with
@@ -174,20 +180,26 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
       | [ Atom (source_position, Atom "dec"); thing ] ->
           EOp (Dec, sexp_to_expr_with_position thing, source_position)
       | [ Atom (let_pos, Atom "let"); id_value_sexp; body_sexp ] -> (
-        (* For the two-argument "let" identifier and value, we need
+          (* For the two-argument "let" identifier and value, we need
            to match down an extra list level. *)
-        match id_value_sexp with
-          | Annotated.List (_, [Atom (_, Atom id); value_sexp], _) -> (
-              ELet
-                ( id,
-                  sexp_to_expr_with_position value_sexp,
-                  sexp_to_expr_with_position body_sexp,
-                  source_position ))
+          match id_value_sexp with
+          | Annotated.List (_, [ Atom (_, Atom id); value_sexp ], _) -> (
+              match int_of_string_opt id with
+              | None ->
+                  ELet
+                    ( id,
+                      sexp_to_expr_with_position value_sexp,
+                      sexp_to_expr_with_position body_sexp,
+                      source_position )
+              | _ ->
+                  failwith
+                    (to_parse_error_string
+                       (sprintf "Error 'let' id value %s is an integer not an id" id) id_value_sexp)
+              )
           | _ ->
-            failwith
-              (sprintf "Error parsing let id and value at %s."
-                 (position_to_human source_position)))
-
+              failwith
+                (to_parse_error_string "Error parsing 'let' id/value pair"
+                   id_value_sexp))
       | [ Atom (source_position, Atom "="); left_sexp; right_sexp ] ->
           EComp
             ( Eq,
@@ -207,9 +219,7 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
               sexp_to_expr_with_position right_sexp,
               source_position )
       (* any other List S-expressions aren't legal in the 331 language *)
-      | _ ->
-          failwith
-            (sprintf "Parse error at %s" (position_to_human source_position)))
+      | _ -> failwith (to_parse_error_string "Error parsing" sexp_annotated))
 
 (* Note: we add "_with_position" in case you want to be able to use
    parse as well.
