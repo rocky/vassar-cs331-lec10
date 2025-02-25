@@ -146,6 +146,14 @@ let new_label (s : string) : string =
   (* and concatenate counter to base string *)
   s ^ count_str
 
+(* Create a string parse error message form an annonated S-expression and
+its location. *)
+let to_parse_error_string (prefix : string) (sexp_annotated : Sexp.Annotated.t)
+    : string =
+  sprintf "%s '%s' at %s" prefix
+    (Sexplib.Sexp.to_string_hum (Sexp.Annotated.get_sexp sexp_annotated))
+    (position_to_human (Sexp.Annotated.get_range sexp_annotated))
+
 (* Note: we add "_with_position" in case you want to be able to use
    sexpr_to_expr as well.
 *)
@@ -157,99 +165,67 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
       (* Check for boolean constants before checking for generic identifiers *)
       | Atom "true" -> EBool (true, source_position)
       | Atom "false" -> EBool (false, source_position)
-      | Atom s -> (
-          match int_of_string_opt s with
-          | None -> EId (s, source_position)
-          | Some i -> ENum (i, source_position))
+      | Atom id -> (
+          match int_of_string_opt id with
+          | None -> EId (id, source_position)
+          | Some int_value -> ENum (int_value, source_position))
       | _ ->
-          failwith
-            (sprintf "Error parsing an Atom sexp at %s."
-               (position_to_human source_position)))
-  | List (source_position, annotated_list, type_t) -> (
+          failwith (to_parse_error_string "Error parsing Atom" sexp_annotated))
+  | Annotated.List (source_position, annotated_list, _) -> (
       (* parse Lists *)
-      match List.hd annotated_list with
+      match annotated_list with
       (* Parse unary "inc" and "dec" functions *)
-      | Atom (source_position, Atom "inc") ->
-          EOp
-            ( Inc,
-              sexp_to_expr_with_position (List.nth annotated_list 1),
-              source_position )
-      | Atom (source_position, Atom "dec") ->
-          EOp
-            ( Dec,
-              sexp_to_expr_with_position (List.nth annotated_list 1),
-              source_position )
-      | Atom (source_position, Atom "let") -> (
+      | [ Atom (source_position, Atom "inc"); thing ] ->
+          EOp (Inc, sexp_to_expr_with_position thing, source_position)
+      | [ Atom (source_position, Atom "dec"); thing ] ->
+          EOp (Dec, sexp_to_expr_with_position thing, source_position)
+      | [ Atom (let_pos, Atom "let"); id_value_sexp; body_sexp ] -> (
           (* For the two-argument "let" identifier and value, we need
-             to match down an extra list level. *)
-          match List.nth annotated_list 1 with
-          | List (source_position, name_value_sexp, type_t) -> (
-              match List.nth name_value_sexp 0 with
-              | Atom (source_position, name_sexp) -> (
-                  match name_sexp with
-                  | Atom name -> (
-                      match int_of_string_opt name with
-                      | None ->
-                          ELet
-                            ( name,
-                              sexp_to_expr_with_position
-                                (List.nth name_value_sexp 1),
-                              sexp_to_expr_with_position
-                                (List.nth annotated_list 2),
-                              source_position )
-                      | _ ->
-                          failwith
-                            (sprintf
-                               "An identifier is expected as the first \
-                                argument of let, but we see an integer at %s."
-                               (position_to_human source_position)))
-                  | _ ->
-                      failwith
-                        (sprintf
-                           "An atom is expected as the first argument of let \
-                            at %s."
-                           (position_to_human source_position)))
+           to match down an extra list level. *)
+          match id_value_sexp with
+          | Annotated.List (_, [ Atom (id_position, Atom id); value_sexp ], _) -> (
+              match int_of_string_opt id with
+              | None ->
+                  ELet
+                    ( id,
+                      sexp_to_expr_with_position value_sexp,
+                      sexp_to_expr_with_position body_sexp,
+                      id_position )
               | _ ->
                   failwith
-                    (sprintf
-                       "An atom is expected as the first argument of let at %s."
-                       (position_to_human source_position)))
+                    (to_parse_error_string
+                       (sprintf "Error 'let' id value %s is an integer, not an id" id) id_value_sexp)
+              )
           | _ ->
               failwith
-                (sprintf
-                   "A List is expected as the first argument of let at %s."
-                   (position_to_human source_position)))
-      | Atom (source_position, Atom "if") ->
+                (to_parse_error_string "Error parsing 'let' id/value pair"
+                   id_value_sexp))
+      | [ Atom (source_position, Atom "if"); test_expr; then_expr; else_expr] ->
           EIf
-            ( sexp_to_expr_with_position (List.nth annotated_list 1),
-              sexp_to_expr_with_position (List.nth annotated_list 2),
-              sexp_to_expr_with_position (List.nth annotated_list 3),
+            ( sexp_to_expr_with_position test_expr,
+              sexp_to_expr_with_position then_expr,
+              sexp_to_expr_with_position else_expr,
               source_position )
-      | Atom (source_position, Atom "=") ->
+      | [ Atom (source_position, Atom "="); left_sexp; right_sexp ] ->
           EComp
             ( Eq,
-              sexp_to_expr_with_position (List.nth annotated_list 1),
-              sexp_to_expr_with_position (List.nth annotated_list 2),
+              sexp_to_expr_with_position left_sexp,
+              sexp_to_expr_with_position right_sexp,
               source_position )
-      | Atom (source_position, Atom "<") ->
+      | [ Atom (source_position, Atom "<"); left_sexp; right_sexp ] ->
           EComp
             ( Le,
-              sexp_to_expr_with_position (List.nth annotated_list 1),
-              sexp_to_expr_with_position (List.nth annotated_list 2),
+              sexp_to_expr_with_position left_sexp,
+              sexp_to_expr_with_position right_sexp,
               source_position )
-      | Atom (source_position, Atom ">") ->
+      | [ Atom (source_position, Atom ">"); left_sexp; right_sexp ] ->
           EComp
             ( Gt,
-              sexp_to_expr_with_position (List.nth annotated_list 1),
-              sexp_to_expr_with_position (List.nth annotated_list 2),
+              sexp_to_expr_with_position left_sexp,
+              sexp_to_expr_with_position right_sexp,
               source_position )
-      (* any other List s-expressions aren't legal in the 331 language *)
-      | _ ->
-          failwith
-            (sprintf
-               "List expression at %s, does not start with an identifier I \
-                know about."
-               (position_to_human source_position)))
+      (* any other List S-expression is not legal in the 331 language *)
+      | _ -> failwith (to_parse_error_string "Error parsing" sexp_annotated))
 
 (* Note: we add "_with_position" in case you want to be able to use
    parse as well.
@@ -286,7 +262,6 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
           [ Loc source_position; IMov (stackloc i, Reg Rax) ])
   | EOp (op, variable, source_position) ->
       (* handle nested expression *)
-      let loc : instr list = [ Loc source_position ] in
       let rec_instrs = expr_to_instrs variable env si in
       (* figure out which op it is *)
       let new_instr =
@@ -295,24 +270,23 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
         | Dec -> [ Loc source_position; ISub (Const 1, Reg Rax) ]
         (* smush the instructions *)
       in
-      loc @ rec_instrs @ new_instr
-  | ELet (x, v, b, source_position) ->
+      rec_instrs @ new_instr
+  | ELet (x, value, body, id_source_position) ->
       (* figure out what value is -> rax *)
       (* note that if a var is declared inside v
                        then x will clobber it because si is unchanged *)
-      let loc : instr list = [ Loc source_position ] in
-      let v_instrs : instr list = expr_to_instrs v env si in
+      let loc : instr list = [ Loc id_source_position ] in
+      let value_instrs : instr list = expr_to_instrs value env si in
       (* move value from rax to next available stack spot *)
-      let store : instr list = [ IMov (Reg Rax, stackloc si) ] in
+      let store_instrs : instr list = [ IMov (Reg Rax, stackloc si) ] in
       (* generate instructions for body *)
       (* env must be updated so x can be found inside b.
                        si must be updated so that var inside v doesn't clobber x *)
-      let b_instrs : instr list = expr_to_instrs b ((x, si) :: env) (si + 1) in
+      let body_instrs : instr list = expr_to_instrs body ((x, si) :: env) (si + 1) in
       (* smush all instructions together *)
-      loc @ v_instrs @ store @ b_instrs
-  | EIf (test_exp, then_exp, else_exp, source_position) ->
+      value_instrs @ loc @ store_instrs @ body_instrs
+  | EIf (test_exp, then_exp, else_exp, _) ->
       (* generate instrs for recursive expressions *)
-      let loc : instr list = [ Loc source_position ] in
       let test_exp_instrs : instr list = expr_to_instrs test_exp env si in
       let then_exp_instrs : instr list = expr_to_instrs then_exp env si in
       let else_exp_instrs : instr list = expr_to_instrs else_exp env si in
@@ -328,7 +302,7 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
       let else_l : instr list = [ ILab else_s ] in
       let after_l : instr list = [ ILab after_s ] in
       (* put it all together - order matters *)
-      loc @ test_exp_instrs @ compare @ je @ then_exp_instrs @ jmp @ else_l
+      test_exp_instrs @ compare @ je @ then_exp_instrs @ jmp @ else_l
       @ else_exp_instrs @ after_l
   | EComp (comp, left_exp, right_exp, source_position) ->
       (* generate instrs for left_exp and save to stack *)
@@ -353,7 +327,7 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
                               won't jump and then will move into 1 rax *)
         (* this is simpler than if because only uses one jump and label *)
       in
-      loc @ left_exp_instrs @ store_left_exp @ right_exp_instrs @ compare
+      left_exp_instrs @ store_left_exp @ right_exp_instrs @ loc @ compare
       @ f_instrs @ jmp @ t_instrs @ after_l
 
 (* convert a list of instructions into one properly formatted string *)
