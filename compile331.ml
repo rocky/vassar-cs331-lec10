@@ -1,4 +1,4 @@
-M(* 331 language compiler. *)
+(* 331 language compiler. *)
 open Printf
 open Sexplib.Sexp
 module Sexp = Sexplib.Sexp
@@ -157,15 +157,15 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
       (* Check for boolean constants before checking for generic identifiers *)
       | Atom "true" -> EBool (true, source_position)
       | Atom "false" -> EBool (false, source_position)
-      | Atom s -> (
-          match int_of_string_opt s with
-          | None -> EId (s, source_position)
-          | Some i -> ENum (i, source_position))
+      | Atom id -> (
+          match int_of_string_opt id with
+          | None -> EId (id, source_position)
+          | Some int_value -> ENum (int_value, source_position))
       | _ ->
           failwith
             (sprintf "Error parsing an Atom sexp at %s."
                (position_to_human source_position)))
-  | List (source_position, annotated_list, type_t) -> (
+  | Annotated.List (source_position, annotated_list, _) -> (
       (* parse Lists *)
       match annotated_list with
       (* Parse unary "inc" and "dec" functions *)
@@ -173,15 +173,21 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
           EOp (Inc, sexp_to_expr_with_position thing, source_position)
       | [ Atom (source_position, Atom "dec"); thing ] ->
           EOp (Dec, sexp_to_expr_with_position thing, source_position)
-      (* For the two-argument "let" identifier and value, we need
-             to match down an extra list level. *)
-      (* FIXME: isolate id_value_sexp into id and value *)
-      | [ Atom (let_pos, Atom "let"); id_value_sexp; body_sexp ] ->
-          ELet
-            ( "fixme",
-              sexp_to_expr_with_position id_value_sexp,
-              sexp_to_expr_with_position body_sexp,
-              source_position )
+      | [ Atom (let_pos, Atom "let"); id_value_sexp; body_sexp ] -> (
+        (* For the two-argument "let" identifier and value, we need
+           to match down an extra list level. *)
+        match id_value_sexp with
+          | Annotated.List (_, [Atom (_, Atom id); value_sexp], _) -> (
+              ELet
+                ( id,
+                  sexp_to_expr_with_position value_sexp,
+                  sexp_to_expr_with_position body_sexp,
+                  source_position ))
+          | _ ->
+            failwith
+              (sprintf "Error parsing let id and value at %s."
+                 (position_to_human source_position)))
+
       | [ Atom (source_position, Atom "="); left_sexp; right_sexp ] ->
           EComp
             ( Eq,
@@ -200,7 +206,7 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
               sexp_to_expr_with_position left_sexp,
               sexp_to_expr_with_position right_sexp,
               source_position )
-      (* any other List s-expressions aren't legal in the 331 language *)
+      (* any other List S-expressions aren't legal in the 331 language *)
       | _ ->
           failwith
             (sprintf "Parse error at %s" (position_to_human source_position)))
