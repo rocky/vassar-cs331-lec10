@@ -167,18 +167,19 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
                (position_to_human source_position)))
   | List (source_position, annotated_list, type_t) -> (
       (* parse Lists *)
-      match List.hd annotated_list with
+      match annotated_list with
       (* Parse unary "inc" and "dec" functions *)
-      | Atom (source_position, Atom "inc") ->
+      | [Atom (source_position, Atom "inc");  thing] ->
           EOp
             ( Inc,
-              sexp_to_expr_with_position (List.nth annotated_list 1),
+              sexp_to_expr_with_position thing,
               source_position )
-      | Atom (source_position, Atom "dec") ->
+      | [Atom (source_position, Atom "dec"); thing] ->
           EOp
             ( Dec,
-              sexp_to_expr_with_position (List.nth annotated_list 1),
+              sexp_to_expr_with_position (thing),
               source_position )
+      (******
       | Atom (source_position, Atom "let") -> (
           (* For the two-argument "let" identifier and value, we need
              to match down an extra list level. *)
@@ -219,36 +220,36 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
                 (sprintf
                    "A List is expected as the first argument of let at %s."
                    (position_to_human source_position)))
-      | Atom (source_position, Atom "if") ->
+      ****)
+      | [Atom (source_position, Atom "if"); test_expr; then_expr; else_expr] ->
           EIf
-            ( sexp_to_expr_with_position (List.nth annotated_list 1),
-              sexp_to_expr_with_position (List.nth annotated_list 2),
-              sexp_to_expr_with_position (List.nth annotated_list 3),
+            ( sexp_to_expr_with_position test_expr,
+              sexp_to_expr_with_position then_expr,
+              sexp_to_expr_with_position else_expr,
               source_position )
-      | Atom (source_position, Atom "=") ->
+      | [Atom (source_position, Atom "="); left_expr; right_expr] ->
           EComp
             ( Eq,
-              sexp_to_expr_with_position (List.nth annotated_list 1),
-              sexp_to_expr_with_position (List.nth annotated_list 2),
+              sexp_to_expr_with_position left_expr,
+              sexp_to_expr_with_position right_expr,
               source_position )
-      | Atom (source_position, Atom "<") ->
+      | [Atom (source_position, Atom "<"); left_expr; right_expr] ->
           EComp
             ( Le,
-              sexp_to_expr_with_position (List.nth annotated_list 1),
-              sexp_to_expr_with_position (List.nth annotated_list 2),
+              sexp_to_expr_with_position left_expr,
+              sexp_to_expr_with_position right_expr,
               source_position )
-      | Atom (source_position, Atom ">") ->
+      | [Atom (source_position, Atom ">"); left_expr; right_expr] ->
           EComp
             ( Gt,
-              sexp_to_expr_with_position (List.nth annotated_list 1),
-              sexp_to_expr_with_position (List.nth annotated_list 2),
+              sexp_to_expr_with_position left_expr,
+              sexp_to_expr_with_position right_expr,
               source_position )
       (* any other List s-expressions aren't legal in the 331 language *)
       | _ ->
           failwith
             (sprintf
-               "List expression at %s, does not start with an identifier I \
-                know about."
+               "Parse error at %s"
                (position_to_human source_position)))
 
 (* Note: we add "_with_position" in case you want to be able to use
