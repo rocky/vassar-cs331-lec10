@@ -1,4 +1,4 @@
-(* 331 language compiler. *)
+M(* 331 language compiler. *)
 open Printf
 open Sexplib.Sexp
 module Sexp = Sexplib.Sexp
@@ -169,88 +169,41 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
       (* parse Lists *)
       match annotated_list with
       (* Parse unary "inc" and "dec" functions *)
-      | [Atom (source_position, Atom "inc");  thing] ->
-          EOp
-            ( Inc,
-              sexp_to_expr_with_position thing,
-              source_position )
-      | [Atom (source_position, Atom "dec"); thing] ->
-          EOp
-            ( Dec,
-              sexp_to_expr_with_position (thing),
-              source_position )
-      (******
-      | Atom (source_position, Atom "let") -> (
-          (* For the two-argument "let" identifier and value, we need
+      | [ Atom (source_position, Atom "inc"); thing ] ->
+          EOp (Inc, sexp_to_expr_with_position thing, source_position)
+      | [ Atom (source_position, Atom "dec"); thing ] ->
+          EOp (Dec, sexp_to_expr_with_position thing, source_position)
+      (* For the two-argument "let" identifier and value, we need
              to match down an extra list level. *)
-          match List.nth annotated_list 1 with
-          | List (source_position, name_value_sexp, type_t) -> (
-              match List.nth name_value_sexp 0 with
-              | Atom (source_position, name_sexp) -> (
-                  match name_sexp with
-                  | Atom name -> (
-                      match int_of_string_opt name with
-                      | None ->
-                          ELet
-                            ( name,
-                              sexp_to_expr_with_position
-                                (List.nth name_value_sexp 1),
-                              sexp_to_expr_with_position
-                                (List.nth annotated_list 2),
-                              source_position )
-                      | _ ->
-                          failwith
-                            (sprintf
-                               "An identifier is expected as the first \
-                                argument of let, but we see an integer at %s."
-                               (position_to_human source_position)))
-                  | _ ->
-                      failwith
-                        (sprintf
-                           "An atom is expected as the first argument of let \
-                            at %s."
-                           (position_to_human source_position)))
-              | _ ->
-                  failwith
-                    (sprintf
-                       "An atom is expected as the first argument of let at %s."
-                       (position_to_human source_position)))
-          | _ ->
-              failwith
-                (sprintf
-                   "A List is expected as the first argument of let at %s."
-                   (position_to_human source_position)))
-      ****)
-      | [Atom (source_position, Atom "if"); test_expr; then_expr; else_expr] ->
-          EIf
-            ( sexp_to_expr_with_position test_expr,
-              sexp_to_expr_with_position then_expr,
-              sexp_to_expr_with_position else_expr,
+      (* FIXME: isolate id_value_sexp into id and value *)
+      | [ Atom (let_pos, Atom "let"); id_value_sexp; body_sexp ] ->
+          ELet
+            ( "fixme",
+              sexp_to_expr_with_position id_value_sexp,
+              sexp_to_expr_with_position body_sexp,
               source_position )
-      | [Atom (source_position, Atom "="); left_expr; right_expr] ->
+      | [ Atom (source_position, Atom "="); left_sexp; right_sexp ] ->
           EComp
             ( Eq,
-              sexp_to_expr_with_position left_expr,
-              sexp_to_expr_with_position right_expr,
+              sexp_to_expr_with_position left_sexp,
+              sexp_to_expr_with_position right_sexp,
               source_position )
-      | [Atom (source_position, Atom "<"); left_expr; right_expr] ->
+      | [ Atom (source_position, Atom "<"); left_sexp; right_sexp ] ->
           EComp
             ( Le,
-              sexp_to_expr_with_position left_expr,
-              sexp_to_expr_with_position right_expr,
+              sexp_to_expr_with_position left_sexp,
+              sexp_to_expr_with_position right_sexp,
               source_position )
-      | [Atom (source_position, Atom ">"); left_expr; right_expr] ->
+      | [ Atom (source_position, Atom ">"); left_sexp; right_sexp ] ->
           EComp
             ( Gt,
-              sexp_to_expr_with_position left_expr,
-              sexp_to_expr_with_position right_expr,
+              sexp_to_expr_with_position left_sexp,
+              sexp_to_expr_with_position right_sexp,
               source_position )
       (* any other List s-expressions aren't legal in the 331 language *)
       | _ ->
           failwith
-            (sprintf
-               "Parse error at %s"
-               (position_to_human source_position)))
+            (sprintf "Parse error at %s" (position_to_human source_position)))
 
 (* Note: we add "_with_position" in case you want to be able to use
    parse as well.
