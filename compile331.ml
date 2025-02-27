@@ -146,7 +146,7 @@ let new_label (s : string) : string =
   (* and concatenate counter to base string *)
   s ^ count_str
 
-(* Create a string parse error message form an annonated S-expression and
+(* Create a string parse error message form an annotated S-expression and
 its location. *)
 let to_parse_error_string (prefix : string) (sexp_annotated : Sexp.Annotated.t)
     : string =

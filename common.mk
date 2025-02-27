@@ -1,5 +1,6 @@
 # Common Makefile definitions for 331 compiling system
 
+AS_331 ?= as
 CC_331 ?= gcc
 CFLAGS_331 ?= -g
 MAKE ?= make
@@ -14,7 +15,7 @@ VERBOSE ?= "-v"  # or set to ""
 	$(CC_331) $(CFLAGS_311) -z noexecstack -o $@ $(MAIN_STUB_FILE) $<
 
 %.o: %.s
-	$(CC_331) $(CFLAGS_331) -c $< -o $@
+	$(AS_331) $(CFLAGS_331) -c $< -o $@
 
 #: Build and run a 331 program
 %: %.run
