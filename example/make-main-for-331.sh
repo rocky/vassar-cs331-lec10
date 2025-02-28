@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # Equivalent to basename $0; the short program name
 typeset pname=${0##*/}
 
@@ -8,7 +7,7 @@ usage() {
 
 ${pname} [OPTIONS] *file-path*.331
 
-Creates a dummy 331 language #include file to refer to when debugging a 331 program.
+Creates a dummy C main program which includes a copy of a include 331 language file to facilitate debugging.
 
 options:
   -h  this help
@@ -59,20 +58,15 @@ if [[ ! -r "$file_331" ]] ; then
     usage
 fi
 
-if ((verbose)); then
-    printf "Input 311-language file ${file_331}:\n"
-    cat $file_331
-    echo
+short_name=$(basename $file_331 .331)
+main_file=main-for-${short_name}.c
+sed -e "s/dummy.331/$file_331/ 1" main.c.in > ${main_file}
+if (($?)); then
+    echo >&2 "Something went wrong with replacing name in ${main_file}"
+    exit 2
 fi
-
-# Checking all done. Now get to work!
-
-file_331_h="${file_331}.h"
-echo " /* ${file_331} code starts in the line below: " > $file_331_h
-cat "$file_331" >> "$file_331_h"
-echo "*/" >> "$file_331_h"
-
 if ((verbose)); then
-    printf "Created file ${file_331_h}:\n"
-    cat --number ${file_331_h}
+    printf "Substituted part of ${main_file}\n"
+    head --lines=3 ${main_file}
+    echo "..."
 fi

@@ -1,5 +1,6 @@
-/* Dummy main program for 331 language code */
-#include "dummy.331.h.in"
+/* Dummy main program for dummy.331 language code. */
+/* We include dummy.331.h in order to have this file available inside debug tables. */
+#include "dummy.331.h"
 #include <stdio.h>
 
 extern int our_code_starts_here();
