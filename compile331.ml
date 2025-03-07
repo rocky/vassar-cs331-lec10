@@ -59,6 +59,22 @@ type expr =
   (* EComp(Eq,ENum(3),ENum(5)) *)
   | EComp of comp * expr * expr * source_position_type
 
+(* Return a position for the entire program. Note: In this hacky
+   version we will assume everything is on line 1. A more proper
+   implementation would count newlines and and pick out the
+   end column offset based on the last newline.
+*)
+let get_program_position (program : string) : source_position_type =
+  {
+    start_pos = { Parsexp.Positions.line = 1; col = 1; offset = 0 };
+    end_pos =
+      {
+        Parsexp.Positions.line = 1;
+        col = String.length program;
+        offset = String.length program;
+      };
+  }
+
 (* env is a var name and its value *)
 type tenv = (string * int) list
 
@@ -69,6 +85,7 @@ type arg = Const of int | Reg of reg | RegOffset of int * reg
 (* A type for our intermediate-representation instructions. *)
 type instr =
   | Loc of source_position_type
+  | EndLoc of source_position_type
   | IAdd of arg * arg
   | ISub of arg * arg
   | IMov of arg * arg
@@ -114,6 +131,7 @@ let instr_to_string (i : instr) : string =
   | IRet -> "ret"
   (* Note: below we add one to convert from 0-origin to 1-origin.  *)
   | Loc p -> sprintf ".loc 1 %d %d" (p.start_pos.line + 1) (p.start_pos.col + 1)
+  | EndLoc p -> sprintf ".loc 1 %d %d" (p.end_pos.line + 1) (p.end_pos.col + 1)
 (* HELPER FUNCTIONS *)
 
 (* wrapper for int_of_string *)
@@ -183,7 +201,8 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
           (* For the two-argument "let" identifier and value, we need
            to match down an extra list level. *)
           match id_value_sexp with
-          | Annotated.List (_, [ Atom (id_position, Atom id); value_sexp ], _) -> (
+          | Annotated.List (_, [ Atom (id_position, Atom id); value_sexp ], _)
+            -> (
               match int_of_string_opt id with
               | None ->
                   ELet
@@ -194,13 +213,15 @@ let rec sexp_to_expr_with_position (sexp_annotated : Sexp.Annotated.t) =
               | _ ->
                   failwith
                     (to_parse_error_string
-                       (sprintf "Error 'let' id value %s is an integer, not an id" id) id_value_sexp)
-              )
+                       (sprintf
+                          "Error 'let' id value %s is an integer, not an id" id)
+                       id_value_sexp))
           | _ ->
               failwith
                 (to_parse_error_string "Error parsing 'let' id/value pair"
                    id_value_sexp))
-      | [ Atom (source_position, Atom "if"); test_expr; then_expr; else_expr] ->
+      | [ Atom (source_position, Atom "if"); test_expr; then_expr; else_expr ]
+        ->
           EIf
             ( sexp_to_expr_with_position test_expr,
               sexp_to_expr_with_position then_expr,
@@ -282,7 +303,9 @@ let rec expr_to_instrs (e : expr) (env : tenv) (si : int) : instr list =
       (* generate instructions for body *)
       (* env must be updated so x can be found inside b.
                        si must be updated so that var inside v doesn't clobber x *)
-      let body_instrs : instr list = expr_to_instrs body ((x, si) :: env) (si + 1) in
+      let body_instrs : instr list =
+        expr_to_instrs body ((x, si) :: env) (si + 1)
+      in
       (* smush all instructions together *)
       value_instrs @ loc @ store_instrs @ body_instrs
   | EIf (test_exp, then_exp, else_exp, _) ->
@@ -346,11 +369,14 @@ let compile_with_position (program : string) (source_file_path : string) :
     string =
   (* source program converted to expressions *)
   let ast : expr = parse_with_position program in
+  let program_position = get_program_position program in
   (* generate code for the AST *)
   (* si starts at 1 to not clobber stack pointer *)
   let instrs : instr list = expr_to_instrs ast [] 1 in
   (* make instrs into a giant string *)
-  let instrs_str : string = instrs_to_string (instrs @ [ IRet ]) in
+  let instrs_str : string =
+    instrs_to_string (instrs @ [ EndLoc program_position; IRet ])
+  in
   (* add the boilerplate to instructions to make it work *)
   sprintf
     "\n\
